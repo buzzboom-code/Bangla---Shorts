@@ -1,9 +1,9 @@
 import os
 import asyncio
+import subprocess
 from groq import Groq
 import edge_tts
 
-# Groq client
 client = Groq(api_key=os.environ.get("GROQ_API_KEY"))
 
 async def generate_bengali_script():
@@ -28,26 +28,45 @@ async def generate_bengali_script():
     return script
 
 async def generate_voice(script, output_file="voice.mp3"):
-    # বাংলা ভয়েস (বাংলাদেশ)
-    voice = "bn-BD-PradeepNeural"
-    
+    voice = "bn-BD-PradeepNeural"  # পুরুষ ভয়েস
     communicate = edge_tts.Communicate(script, voice)
     await communicate.save(output_file)
     print(f"Voice saved as {output_file}")
+
+def create_video(audio_file="voice.mp3", output_file="short.mp4"):
+    print("Creating vertical video...")
+    
+    # কালো ব্যাকগ্রাউন্ড + অডিও দিয়ে ৯:১৬ ভিডিও বানানো
+    cmd = [
+        "ffmpeg",
+        "-y",
+        "-f", "lavfi",
+        "-i", "color=c=black:s=1080x1920:d=60",
+        "-i", audio_file,
+        "-c:v", "libx264",
+        "-tune", "stillimage",
+        "-c:a", "aac",
+        "-b:a", "192k",
+        "-pix_fmt", "yuv420p",
+        "-shortest",
+        output_file
+    ]
+    
+    subprocess.run(cmd, check=True)
+    print(f"Video saved as {output_file}")
 
 async def main():
     print("Starting Bengali Shorts generation...")
     
     script = await generate_bengali_script()
     
-    # স্ক্রিপ্ট সেভ করা
     with open("script.txt", "w", encoding="utf-8") as f:
         f.write(script)
     
-    # ভয়েস জেনারেট করা
     await generate_voice(script)
+    create_video()
     
-    print("Done! script.txt and voice.mp3 created.")
+    print("Done! script.txt, voice.mp3 and short.mp4 created.")
 
 if __name__ == "__main__":
     asyncio.run(main())
