@@ -35,3 +35,4 @@ jobs:
           path: |
             script.txt
             voice.mp3
+            short.mp4
