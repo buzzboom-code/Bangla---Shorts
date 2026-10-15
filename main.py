@@ -29,7 +29,7 @@ async def generate_bengali_script():
 
 async def generate_voice(script, output_file="voice.mp3"):
     # বাংলা ভয়েস (বাংলাদেশ)
-    voice = "bn-BD-PradeeNeural"
+    voice = "bn-BD-PradeepNeural"
     
     communicate = edge_tts.Communicate(script, voice)
     await communicate.save(output_file)
