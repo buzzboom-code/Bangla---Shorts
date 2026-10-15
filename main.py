@@ -79,7 +79,7 @@ def create_video(script, audio_file="voice.mp3", output_file="short.mp4"):
         print(result.stderr)
         raise Exception("Video creation failed")
     
-    print(f"Video saved as {output_file}"):
+    print(f"Video saved as {output_file}")
     print("Creating vertical video with captions...")
     
     # স্ক্রিপ্টকে টেক্সট ফাইলে সেভ করা
