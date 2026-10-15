@@ -28,21 +28,25 @@ async def generate_bengali_script():
     return script
 
 async def generate_voice(script, output_file="voice.mp3"):
-    voice = "bn-BD-PradeepNeural"  # পুরুষ ভয়েস
+    voice = "bn-BD-PradeepNeural"
     communicate = edge_tts.Communicate(script, voice)
     await communicate.save(output_file)
     print(f"Voice saved as {output_file}")
 
-def create_video(audio_file="voice.mp3", output_file="short.mp4"):
-    print("Creating vertical video...")
+def create_video(script, audio_file="voice.mp3", output_file="short.mp4"):
+    print("Creating vertical video with captions...")
     
-    # কালো ব্যাকগ্রাউন্ড + অডিও দিয়ে ৯:১৬ ভিডিও বানানো
+    # স্ক্রিপ্টকে টেক্সট ফাইলে সেভ করা
+    with open("caption.txt", "w", encoding="utf-8") as f:
+        f.write(script)
+    
     cmd = [
         "ffmpeg",
         "-y",
         "-f", "lavfi",
         "-i", "color=c=black:s=1080x1920:d=60",
         "-i", audio_file,
+        "-vf", "drawtext=fontfile=/usr/share/fonts/truetype/noto/NotoSansBengali-Regular.ttf:textfile=caption.txt:fontcolor=white:fontsize=48:x=(w-text_w)/2:y=(h-text_h)/2:box=1:boxcolor=black@0.5:boxborderw=10",
         "-c:v", "libx264",
         "-tune", "stillimage",
         "-c:a", "aac",
@@ -64,7 +68,7 @@ async def main():
         f.write(script)
     
     await generate_voice(script)
-    create_video()
+    create_video(script)
     
     print("Done! script.txt, voice.mp3 and short.mp4 created.")
 
