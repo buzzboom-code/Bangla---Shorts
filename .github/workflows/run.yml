@@ -1,9 +1,7 @@
 name: Bengali Shorts Generator
 
 on:
-  workflow_dispatch:   # ম্যানুয়ালি চালানোর জন্য
-  # schedule:
-  #   - cron: '0 */3 * * *'   # প্রতি ৩ ঘণ্টায় (পরে চালু করব)
+  workflow_dispatch:
 
 jobs:
   generate:
