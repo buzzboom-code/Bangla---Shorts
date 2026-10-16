@@ -43,8 +43,8 @@ def create_caption_image(script, output_image="caption.png"):
     
     # ফন্ট খোঁজা
     possible_fonts = [
+        "fonts/NotoSansBengali-Regular.ttf",
         "/usr/share/fonts/truetype/noto/NotoSansBengali-Regular.ttf",
-        "/usr/share/fonts/truetype/noto/NotoSansBengaliUI-Regular.ttf",
         "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
     ]
     
