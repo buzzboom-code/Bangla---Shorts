@@ -1,11 +1,13 @@
 import os
 import asyncio
 import subprocess
+import requests
 from groq import Groq
 import edge_tts
 from PIL import Image, ImageDraw, ImageFont
 
 client = Groq(api_key=os.environ.get("GROQ_API_KEY"))
+UNSPLASH_KEY = os.environ.get("UNSPLASH_ACCESS_KEY")
 
 async def generate_bengali_script():
     prompt = """
@@ -17,9 +19,7 @@ async def generate_bengali_script():
     """
     
     chat_completion = client.chat.completions.create(
-        messages=[
-            {"role": "user", "content": prompt}
-        ],
+        messages=[{"role": "user", "content": prompt}],
         model="openai/gpt-oss-20b",
     )
     
@@ -34,14 +34,59 @@ async def generate_voice(script, output_file="voice.mp3"):
     await communicate.save(output_file)
     print(f"Voice saved as {output_file}")
 
-def create_caption_image(script, output_image="caption.png"):
-    print("Creating caption image with Pillow...")
+def get_keyword(script):
+    """স্ক্রিপ্ট থেকে ইংরেজি কীওয়ার্ড বের করা"""
+    prompt = f"From this Bengali news script, extract 2-3 English keywords for image search. Reply only the keywords separated by space:\n\n{script}"
+    
+    chat_completion = client.chat.completions.create(
+        messages=[{"role": "user", "content": prompt}],
+        model="openai/gpt-oss-20b",
+    )
+    keywords = chat_completion.choices[0].message.content.strip()
+    print(f"Keywords: {keywords}")
+    return keywords
+
+def download_background(keywords, output_file="bg.jpg"):
+    print(f"Searching Unsplash for: {keywords}")
+    
+    headers = {"Authorization": f"Client-ID {UNSPLASH_KEY}"}
+    params = {
+        "query": keywords,
+        "orientation": "portrait",
+        "per_page": 1
+    }
+    
+    response = requests.get("https://api.unsplash.com/search/photos", headers=headers, params=params)
+    
+    if response.status_code == 200:
+        data = response.json()
+        if data["results"]:
+            img_url = data["results"][0]["urls"]["regular"]
+            img_data = requests.get(img_url).content
+            with open(output_file, "wb") as f:
+                f.write(img_data)
+            print(f"Background downloaded: {output_file}")
+            return output_file
+    
+    print("No image found, using solid color")
+    return None
+
+def create_caption_image(script, bg_image=None, output_image="caption.png"):
+    print("Creating caption image...")
     
     width, height = 1080, 1920
-    img = Image.new("RGB", (width, height), color=(15, 15, 35))
+    
+    if bg_image and os.path.exists(bg_image):
+        img = Image.open(bg_image).convert("RGB")
+        img = img.resize((width, height))
+        # একটু ডার্ক করে টেক্সট পড়ার সুবিধা
+        overlay = Image.new("RGB", (width, height), (0, 0, 0))
+        img = Image.blend(img, overlay, 0.45)
+    else:
+        img = Image.new("RGB", (width, height), color=(15, 15, 35))
+    
     draw = ImageDraw.Draw(img)
     
-    # ফন্ট খোঁজা
     possible_fonts = [
         "fonts/NotoSansBengali-Regular.ttf",
         "/usr/share/fonts/truetype/noto/NotoSansBengali-Regular.ttf",
@@ -52,24 +97,21 @@ def create_caption_image(script, output_image="caption.png"):
     for path in possible_fonts:
         if os.path.exists(path):
             try:
-                font = ImageFont.truetype(path, 44)
+                font = ImageFont.truetype(path, 42)
                 print(f"Using font: {path}")
                 break
             except:
                 continue
-    
     if font is None:
         font = ImageFont.load_default()
-        print("Using default font")
     
-    # টেক্সট লাইনে ভাগ করা
     words = script.split()
     lines = []
     current_line = ""
     for word in words:
         test_line = current_line + " " + word if current_line else word
         bbox = draw.textbbox((0, 0), test_line, font=font)
-        if bbox[2] - bbox[0] < width - 100:
+        if bbox[2] - bbox[0] < width - 80:
             current_line = test_line
         else:
             if current_line:
@@ -78,8 +120,7 @@ def create_caption_image(script, output_image="caption.png"):
     if current_line:
         lines.append(current_line)
     
-    # টেক্সট আঁকা
-    line_height = 60
+    line_height = 58
     total_text_height = len(lines) * line_height
     y = (height - total_text_height) // 2
     
@@ -88,23 +129,22 @@ def create_caption_image(script, output_image="caption.png"):
         text_width = bbox[2] - bbox[0]
         x = (width - text_width) // 2
         
-        # ছায়া
         draw.text((x+2, y+2), line, font=font, fill=(0, 0, 0))
-        # মূল টেক্সট
         draw.text((x, y), line, font=font, fill=(255, 255, 255))
         y += line_height
     
     img.save(output_image)
-    print(f"Caption image saved as {output_image}")
+    print(f"Caption image saved")
     return output_image
 
 def create_video(script, audio_file="voice.mp3", output_file="short.mp4"):
-    caption_img = create_caption_image(script)
+    keywords = get_keyword(script)
+    bg = download_background(keywords)
+    caption_img = create_caption_image(script, bg)
     
     print("Creating final video...")
     cmd = [
-        "ffmpeg",
-        "-y",
+        "ffmpeg", "-y",
         "-loop", "1",
         "-i", caption_img,
         "-i", audio_file,
