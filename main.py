@@ -3,6 +3,7 @@ import asyncio
 import subprocess
 from groq import Groq
 import edge_tts
+from PIL import Image, ImageDraw, ImageFont
 
 client = Groq(api_key=os.environ.get("GROQ_API_KEY"))
 
@@ -33,55 +34,87 @@ async def generate_voice(script, output_file="voice.mp3"):
     await communicate.save(output_file)
     print(f"Voice saved as {output_file}")
 
-def create_video(script, audio_file="voice.mp3", output_file="short.mp4"):
-    print("Creating vertical video with captions...")
+def create_caption_image(script, output_image="caption.png"):
+    print("Creating caption image with Pillow...")
     
+    width, height = 1080, 1920
+    img = Image.new("RGB", (width, height), color=(15, 15, 35))
+    draw = ImageDraw.Draw(img)
+    
+    # ফন্ট খোঁজা
+    possible_fonts = [
+        "/usr/share/fonts/truetype/noto/NotoSansBengali-Regular.ttf",
+        "/usr/share/fonts/truetype/noto/NotoSansBengaliUI-Regular.ttf",
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+    ]
+    
+    font = None
+    for path in possible_fonts:
+        if os.path.exists(path):
+            try:
+                font = ImageFont.truetype(path, 44)
+                print(f"Using font: {path}")
+                break
+            except:
+                continue
+    
+    if font is None:
+        font = ImageFont.load_default()
+        print("Using default font")
+    
+    # টেক্সট লাইনে ভাগ করা
     words = script.split()
     lines = []
     current_line = ""
     for word in words:
-        if len(current_line + " " + word) < 22:
-            current_line += " " + word if current_line else word
+        test_line = current_line + " " + word if current_line else word
+        bbox = draw.textbbox((0, 0), test_line, font=font)
+        if bbox[2] - bbox[0] < width - 100:
+            current_line = test_line
         else:
-            lines.append(current_line)
+            if current_line:
+                lines.append(current_line)
             current_line = word
     if current_line:
         lines.append(current_line)
     
-    with open("caption.txt", "w", encoding="utf-8") as f:
-        f.write("\n".join(lines))
+    # টেক্সট আঁকা
+    line_height = 60
+    total_text_height = len(lines) * line_height
+    y = (height - total_text_height) // 2
     
-    possible_fonts = [
-        "/usr/share/fonts/truetype/noto/NotoSansBengali-Regular.ttf",
-        "/usr/share/fonts/truetype/noto/NotoSansBengaliUI-Regular.ttf",
-        "/usr/share/fonts/truetype/lohit-bengali/Lohit-Bengali.ttf",
-        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
-    ]
+    for line in lines:
+        bbox = draw.textbbox((0, 0), line, font=font)
+        text_width = bbox[2] - bbox[0]
+        x = (width - text_width) // 2
+        
+        # ছায়া
+        draw.text((x+2, y+2), line, font=font, fill=(0, 0, 0))
+        # মূল টেক্সট
+        draw.text((x, y), line, font=font, fill=(255, 255, 255))
+        y += line_height
     
-    font_path = None
-    for path in possible_fonts:
-        if os.path.exists(path):
-            font_path = path
-            print(f"Using font: {font_path}")
-            break
+    img.save(output_image)
+    print(f"Caption image saved as {output_image}")
+    return output_image
+
+def create_video(script, audio_file="voice.mp3", output_file="short.mp4"):
+    caption_img = create_caption_image(script)
     
-    if not font_path:
-        print("No suitable font found, using default")
-        font_path = "Sans"
-    
+    print("Creating final video...")
     cmd = [
         "ffmpeg",
         "-y",
-        "-f", "lavfi",
-        "-i", "color=c=#0f0f23:s=1080x1920:d=60",
+        "-loop", "1",
+        "-i", caption_img,
         "-i", audio_file,
-        "-vf", f"drawtext=fontfile={font_path}:textfile=caption.txt:fontcolor=white:fontsize=40:x=(w-text_w)/2:y=(h-text_h)/2:line_spacing=12:box=1:boxcolor=black@0.55:boxborderw=15",
         "-c:v", "libx264",
         "-tune", "stillimage",
         "-c:a", "aac",
         "-b:a", "192k",
         "-pix_fmt", "yuv420p",
         "-shortest",
+        "-vf", "scale=1080:1920",
         output_file
     ]
     
