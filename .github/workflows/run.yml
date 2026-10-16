@@ -24,7 +24,7 @@ jobs:
       - name: Install FFmpeg and Bengali Font
         run: |
           sudo apt-get update
-          sudo apt-get install -y ffmpeg fonts-noto-core fonts-lohit-bengali
+          sudo apt-get install -y ffmpeg fonts-noto-core fonts-beng
 
       - name: Run the script
         env:
