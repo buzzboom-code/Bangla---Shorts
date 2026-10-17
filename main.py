@@ -9,233 +9,191 @@ from PIL import Image, ImageDraw, ImageFont
 client = Groq(api_key=os.environ.get("GROQ_API_KEY"))
 UNSPLASH_KEY = os.environ.get("UNSPLASH_ACCESS_KEY")
 
-def clean_script_for_tts(script):
-    """সাল শব্দ সরিয়ে উচ্চারণ ঠিক করা"""
-    script = script.replace(" সালে", " এ")
-    script = script.replace(" সালের", " এর")
-    script = script.replace(" সাল", "")
-    script = script.replace("সাল ", "")
-    return script
+def clean_for_tts(text):
+    text = text.replace(" সালে", " এ")
+    text = text.replace(" সালের", " এর")
+    text = text.replace(" সাল", "")
+    text = text.replace("সাল ", "")
+    return text.strip()
 
-def clean_script_for_display(script):
-    """ইংরেজি মডেল নাম পরিষ্কার করে বক্স কমানো"""
+def clean_for_display(text):
     replacements = {
         "GPT-5": "জিপিটি ফাইভ",
         "GPT-4": "জিপিটি ফোর",
-        "GPT-4o": "জিপিটি ফোর ও",
         "ChatGPT": "চ্যাটজিপিটি",
         "OpenAI": "ওপেনএআই",
         "AI": "এআই",
         "Google": "গুগল",
         "Microsoft": "মাইক্রোসফট",
-        "Apple": "অ্যাপল",
         "Meta": "মেটা",
+        "Apple": "অ্যাপল",
     }
     for eng, ban in replacements.items():
-        script = script.replace(eng, ban)
-        script = script.replace(eng.lower(), ban)
-        script = script.replace(eng.upper(), ban)
-    return script
+        text = text.replace(eng, ban)
+        text = text.replace(eng.lower(), ban)
+    return text
 
-async def generate_bengali_script():
-    prompt = """
-    তুমি একজন বাংলা নিউজ শর্টস লেখক।
-    বিশ্বের কোনো একটা সাম্প্রতিক গুরুত্বপূর্ণ নিউজ নিয়ে 
-    ৩০-৪০ সেকেন্ডের জন্য একটি আকর্ষণীয় বাংলা শর্টস স্ক্রিপ্ট লেখো।
-    
-    গুরুত্বপূর্ণ নিয়ম:
-    - শুধুমাত্র বাংলা অক্ষর ব্যবহার করবে
-    - কোনো ইংরেজি শব্দ, মডেল নাম, বা ল্যাটিন অক্ষর লিখবে না
-    - সংখ্যা বাংলায় লিখবে (যেমন: ২০২৬, ৫০%)
-    - শুরুতে শক্তিশালী হুক থাকতে হবে
-    - শুধু স্ক্রিপ্টটাই লেখো, অন্য কিছু না
-    """
-    
-    chat_completion = client.chat.completions.create(
-        messages=[{"role": "user", "content": prompt}],
-        model="openai/gpt-oss-20b",
-    )
-    
-    script = chat_completion.choices[0].message.content.strip()
-    print("Generated Script:")
-    print(script)
-    return script
+async def generate_script():
+    prompt = """তুমি একজন পেশাদার বাংলা নিউজ শর্টস লেখক।
+বিশ্বের একটি সাম্প্রতিক গুরুত্বপূর্ণ খবর নিয়ে ৩৫ সেকেন্ডের আকর্ষণীয় বাংলা স্ক্রিপ্ট লেখো।
+নিয়ম:
+- শুধু বাংলায় লিখবে
+- ইংরেজি শব্দ একেবারেই ব্যবহার করবে না
+- শুরুতে শক্তিশালী হুক থাকবে
+- শুধু স্ক্রিপ্ট লিখবে, অন্য কিছু না"""
 
-async def generate_voice(script, output_file="voice.mp3"):
-    voice = "bn-BD-PradeepNeural"
-    cleaned = clean_script_for_tts(script)
-    print("TTS Script:", cleaned)
-    
-    try:
-        communicate = edge_tts.Communicate(cleaned, voice)
-        await communicate.save(output_file)
-        print(f"Voice saved as {output_file}")
-    except Exception as e:
-        print(f"Edge-TTS Error: {e}")
+    for i in range(3):
         try:
-            print("Trying backup voice...")
-            communicate = edge_tts.Communicate(cleaned, "bn-IN-BashkarNeural")
-            await communicate.save(output_file)
-            print(f"Voice saved with backup voice as {output_file}")
-        except Exception as e2:
-            print(f"Backup voice also failed: {e2}")
-            raise Exception("Could not generate voice")
+            res = client.chat.completions.create(
+                messages=[{"role": "user", "content": prompt}],
+                model="openai/gpt-oss-20b",
+                temperature=0.85,
+            )
+            script = res.choices[0].message.content.strip()
+            if script and len(script) > 80:
+                print("Generated Script:")
+                print(script)
+                return script
+            print(f"Attempt {i+1}: script too short, retrying...")
+        except Exception as e:
+            print(f"Attempt {i+1} error: {e}")
 
-def get_keyword(script):
-    prompt = f"From this Bengali news script, extract 2-3 English keywords for image search. Reply only the keywords separated by space:\n\n{script}"
-    
-    chat_completion = client.chat.completions.create(
-        messages=[{"role": "user", "content": prompt}],
-        model="openai/gpt-oss-20b",
-    )
-    keywords = chat_completion.choices[0].message.content.strip()
-    print(f"Keywords: {keywords}")
-    return keywords
+    return "আজকের গুরুত্বপূর্ণ খবর। বিশ্বজুড়ে বড় পরিবর্তন ঘটছে। বিস্তারিত জানতে আমাদের চ্যানেল সাবস্ক্রাইব করুন।"
 
-def download_background(keywords, output_file="bg.jpg"):
-    print(f"Searching Unsplash for: {keywords}")
+async def generate_voice(script, filename="voice.mp3"):
+    cleaned = clean_for_tts(script)
+    print("TTS Script:", cleaned)
+
+    voices = ["bn-BD-PradeepNeural", "bn-IN-BashkarNeural", "bn-BD-NabanitaNeural"]
     
-    if not UNSPLASH_KEY:
-        print("No Unsplash key found")
-        return None
-    
-    headers = {"Authorization": f"Client-ID {UNSPLASH_KEY}"}
-    params = {
-        "query": keywords,
-        "orientation": "portrait",
-        "per_page": 1
-    }
-    
+    for voice in voices:
+        try:
+            communicate = edge_tts.Communicate(cleaned, voice)
+            await communicate.save(filename)
+            if os.path.exists(filename) and os.path.getsize(filename) > 1000:
+                print(f"Voice saved successfully with {voice}")
+                return
+        except Exception as e:
+            print(f"Voice {voice} failed: {e}")
+
+    raise Exception("All voices failed")
+
+def get_keywords(script):
     try:
-        response = requests.get("https://api.unsplash.com/search/photos", headers=headers, params=params, timeout=15)
-        if response.status_code == 200:
-            data = response.json()
-            if data.get("results"):
-                img_url = data["results"][0]["urls"]["regular"]
-                img_data = requests.get(img_url, timeout=15).content
-                with open(output_file, "wb") as f:
-                    f.write(img_data)
-                print(f"Background downloaded: {output_file}")
-                return output_file
+        res = client.chat.completions.create(
+            messages=[{"role": "user", "content": f"Extract 3 English keywords for image search from this text. Reply only keywords:\n{script}"}],
+            model="openai/gpt-oss-20b",
+        )
+        kw = res.choices[0].message.content.strip()
+        print("Keywords:", kw)
+        return kw
+    except:
+        return "news world technology"
+
+def download_bg(keywords):
+    if not UNSPLASH_KEY:
+        return None
+    try:
+        headers = {"Authorization": f"Client-ID {UNSPLASH_KEY}"}
+        r = requests.get("https://api.unsplash.com/search/photos", 
+                         headers=headers, 
+                         params={"query": keywords, "orientation": "portrait", "per_page": 1},
+                         timeout=12)
+        if r.status_code == 200 and r.json().get("results"):
+            url = r.json()["results"][0]["urls"]["regular"]
+            data = requests.get(url, timeout=12).content
+            with open("bg.jpg", "wb") as f:
+                f.write(data)
+            print("Background downloaded")
+            return "bg.jpg"
     except Exception as e:
-        print(f"Unsplash error: {e}")
-    
-    print("No image found, using solid color")
+        print("Background error:", e)
     return None
 
-def create_caption_image(script, bg_image=None, output_image="caption.png"):
-    print("Creating caption image...")
-    
-    # ইংরেজি শব্দ পরিষ্কার করা
-    script = clean_script_for_display(script)
-    
+def create_image(script, bg=None):
+    script = clean_for_display(script)
     width, height = 1080, 1920
-    
-    if bg_image and os.path.exists(bg_image):
-        img = Image.open(bg_image).convert("RGB")
-        img = img.resize((width, height))
-        overlay = Image.new("RGB", (width, height), (0, 0, 0))
-        img = Image.blend(img, overlay, 0.45)
+
+    if bg and os.path.exists(bg):
+        img = Image.open(bg).convert("RGB").resize((width, height))
+        dark = Image.new("RGB", (width, height), (0, 0, 0))
+        img = Image.blend(img, dark, 0.42)
     else:
-        img = Image.new("RGB", (width, height), color=(15, 15, 35))
-    
+        img = Image.new("RGB", (width, height), (12, 12, 30))
+
     draw = ImageDraw.Draw(img)
-    
-    possible_fonts = [
-        "fonts/NotoSansBengali-Regular.ttf",
-        "fonts/NotoSansBengali-Bold.ttf",
-        "/usr/share/fonts/truetype/noto/NotoSansBengali-Regular.ttf",
-        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
-    ]
-    
+
     font = None
-    for path in possible_fonts:
+    for path in ["fonts/NotoSansBengali-Regular.ttf", "fonts/NotoSansBengali-Bold.ttf"]:
         if os.path.exists(path):
             try:
-                font = ImageFont.truetype(path, 42)
-                print(f"Using font: {path}")
+                font = ImageFont.truetype(path, 40)
                 break
             except:
-                continue
+                pass
     if font is None:
         font = ImageFont.load_default()
-        print("Using default font")
-    
+
     words = script.split()
-    lines = []
-    current_line = ""
-    for word in words:
-        test_line = current_line + " " + word if current_line else word
-        bbox = draw.textbbox((0, 0), test_line, font=font)
-        if bbox[2] - bbox[0] < width - 80:
-            current_line = test_line
+    lines, current = [], ""
+    for w in words:
+        test = current + " " + w if current else w
+        if draw.textbbox((0, 0), test, font=font)[2] < width - 70:
+            current = test
         else:
-            if current_line:
-                lines.append(current_line)
-            current_line = word
-    if current_line:
-        lines.append(current_line)
-    
-    line_height = 58
-    total_text_height = len(lines) * line_height
-    y = (height - total_text_height) // 2
-    
+            if current:
+                lines.append(current)
+            current = w
+    if current:
+        lines.append(current)
+
+    y = (height - len(lines) * 55) // 2
     for line in lines:
-        bbox = draw.textbbox((0, 0), line, font=font)
-        text_width = bbox[2] - bbox[0]
-        x = (width - text_width) // 2
+        tw = draw.textbbox((0, 0), line, font=font)[2]
+        x = (width - tw) // 2
         draw.text((x+2, y+2), line, font=font, fill=(0, 0, 0))
         draw.text((x, y), line, font=font, fill=(255, 255, 255))
-        y += line_height
-    
-    img.save(output_image)
-    print(f"Caption image saved")
-    return output_image
+        y += 55
 
-def create_video(script, audio_file="voice.mp3", output_file="short.mp4"):
-    if not os.path.exists(audio_file):
-        raise Exception(f"Audio file not found: {audio_file}")
-    
-    keywords = get_keyword(script)
-    bg = download_background(keywords)
-    caption_img = create_caption_image(script, bg)
-    
-    print("Creating final video...")
+    img.save("caption.png")
+    print("Caption image created")
+    return "caption.png"
+
+def make_video():
+    if not os.path.exists("voice.mp3") or os.path.getsize("voice.mp3") < 1000:
+        raise Exception("Invalid voice file")
+
     cmd = [
         "ffmpeg", "-y",
-        "-loop", "1",
-        "-i", caption_img,
-        "-i", audio_file,
-        "-c:v", "libx264",
-        "-tune", "stillimage",
-        "-c:a", "aac",
-        "-b:a", "192k",
-        "-pix_fmt", "yuv420p",
-        "-shortest",
+        "-loop", "1", "-i", "caption.png",
+        "-i", "voice.mp3",
+        "-c:v", "libx264", "-tune", "stillimage",
+        "-c:a", "aac", "-b:a", "192k",
+        "-pix_fmt", "yuv420p", "-shortest",
         "-vf", "scale=1080:1920",
-        output_file
+        "short.mp4"
     ]
-    
     result = subprocess.run(cmd, capture_output=True, text=True)
     if result.returncode != 0:
-        print("FFmpeg Error:")
         print(result.stderr)
-        raise Exception("Video creation failed")
-    
-    print(f"Video saved as {output_file}")
+        raise Exception("FFmpeg failed")
+    print("Video created successfully")
 
 async def main():
-    print("Starting Bengali Shorts generation...")
-    
-    script = await generate_bengali_script()
+    print("Starting...")
+    script = await generate_script()
     
     with open("script.txt", "w", encoding="utf-8") as f:
         f.write(script)
-    
+
     await generate_voice(script)
-    create_video(script)
     
-    print("Done! script.txt, voice.mp3 and short.mp4 created.")
+    keywords = get_keywords(script)
+    bg = download_bg(keywords)
+    create_image(script, bg)
+    make_video()
+    
+    print("All done!")
 
 if __name__ == "__main__":
     asyncio.run(main())
