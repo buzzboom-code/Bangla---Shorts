@@ -27,12 +27,19 @@ async def generate_bengali_script():
     print("Generated Script:")
     print(script)
     return script
+def clean_script_for_tts(script):
+    """সাল শব্দ সরিয়ে উচ্চারণ ঠিক করা"""
+    script = script.replace(" সালে", " এ")
+    script = script.replace(" সালের", " এর")
+    script = script.replace(" সাল", "")
+    script = script.replace("সাল ", "")
+    return script
 
 async def generate_voice(script, output_file="voice.mp3"):
     voice = "bn-BD-PradeepNeural"
-    communicate = edge_tts.Communicate(script, voice)
-    await communicate.save(output_file)
-    print(f"Voice saved as {output_file}")
+    cleaned = clean_script_for_tts(script)
+    print("TTS Script:", cleaned)
+    communicate = edge_tts.Communicate(cleaned, voice)
 
 def get_keyword(script):
     """স্ক্রিপ্ট থেকে ইংরেজি কীওয়ার্ড বের করা"""
