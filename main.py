@@ -17,6 +17,26 @@ def clean_script_for_tts(script):
     script = script.replace("সাল ", "")
     return script
 
+def clean_script_for_display(script):
+    """ইংরেজি মডেল নাম পরিষ্কার করে বক্স কমানো"""
+    replacements = {
+        "GPT-5": "জিপিটি ফাইভ",
+        "GPT-4": "জিপিটি ফোর",
+        "GPT-4o": "জিপিটি ফোর ও",
+        "ChatGPT": "চ্যাটজিপিটি",
+        "OpenAI": "ওপেনএআই",
+        "AI": "এআই",
+        "Google": "গুগল",
+        "Microsoft": "মাইক্রোসফট",
+        "Apple": "অ্যাপল",
+        "Meta": "মেটা",
+    }
+    for eng, ban in replacements.items():
+        script = script.replace(eng, ban)
+        script = script.replace(eng.lower(), ban)
+        script = script.replace(eng.upper(), ban)
+    return script
+
 async def generate_bengali_script():
     prompt = """
     তুমি একজন বাংলা নিউজ শর্টস লেখক।
@@ -100,6 +120,9 @@ def download_background(keywords, output_file="bg.jpg"):
 
 def create_caption_image(script, bg_image=None, output_image="caption.png"):
     print("Creating caption image...")
+    
+    # ইংরেজি শব্দ পরিষ্কার করা
+    script = clean_script_for_display(script)
     
     width, height = 1080, 1920
     
