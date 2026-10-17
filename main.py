@@ -9,6 +9,14 @@ from PIL import Image, ImageDraw, ImageFont
 client = Groq(api_key=os.environ.get("GROQ_API_KEY"))
 UNSPLASH_KEY = os.environ.get("UNSPLASH_ACCESS_KEY")
 
+def clean_script_for_tts(script):
+    """সাল শব্দ সরিয়ে উচ্চারণ ঠিক করা"""
+    script = script.replace(" সালে", " এ")
+    script = script.replace(" সালের", " এর")
+    script = script.replace(" সাল", "")
+    script = script.replace("সাল ", "")
+    return script
+
 async def generate_bengali_script():
     prompt = """
     তুমি একজন বাংলা নিউজ শর্টস লেখক।
@@ -27,22 +35,28 @@ async def generate_bengali_script():
     print("Generated Script:")
     print(script)
     return script
-def clean_script_for_tts(script):
-    """সাল শব্দ সরিয়ে উচ্চারণ ঠিক করা"""
-    script = script.replace(" সালে", " এ")
-    script = script.replace(" সালের", " এর")
-    script = script.replace(" সাল", "")
-    script = script.replace("সাল ", "")
-    return script
 
 async def generate_voice(script, output_file="voice.mp3"):
     voice = "bn-BD-PradeepNeural"
     cleaned = clean_script_for_tts(script)
     print("TTS Script:", cleaned)
-    communicate = edge_tts.Communicate(cleaned, voice)
+    
+    try:
+        communicate = edge_tts.Communicate(cleaned, voice)
+        await communicate.save(output_file)
+        print(f"Voice saved as {output_file}")
+    except Exception as e:
+        print(f"Edge-TTS Error: {e}")
+        try:
+            print("Trying backup voice...")
+            communicate = edge_tts.Communicate(cleaned, "bn-IN-BashkarNeural")
+            await communicate.save(output_file)
+            print(f"Voice saved with backup voice as {output_file}")
+        except Exception as e2:
+            print(f"Backup voice also failed: {e2}")
+            raise Exception("Could not generate voice")
 
 def get_keyword(script):
-    """স্ক্রিপ্ট থেকে ইংরেজি কীওয়ার্ড বের করা"""
     prompt = f"From this Bengali news script, extract 2-3 English keywords for image search. Reply only the keywords separated by space:\n\n{script}"
     
     chat_completion = client.chat.completions.create(
@@ -56,6 +70,10 @@ def get_keyword(script):
 def download_background(keywords, output_file="bg.jpg"):
     print(f"Searching Unsplash for: {keywords}")
     
+    if not UNSPLASH_KEY:
+        print("No Unsplash key found")
+        return None
+    
     headers = {"Authorization": f"Client-ID {UNSPLASH_KEY}"}
     params = {
         "query": keywords,
@@ -63,17 +81,19 @@ def download_background(keywords, output_file="bg.jpg"):
         "per_page": 1
     }
     
-    response = requests.get("https://api.unsplash.com/search/photos", headers=headers, params=params)
-    
-    if response.status_code == 200:
-        data = response.json()
-        if data["results"]:
-            img_url = data["results"][0]["urls"]["regular"]
-            img_data = requests.get(img_url).content
-            with open(output_file, "wb") as f:
-                f.write(img_data)
-            print(f"Background downloaded: {output_file}")
-            return output_file
+    try:
+        response = requests.get("https://api.unsplash.com/search/photos", headers=headers, params=params, timeout=15)
+        if response.status_code == 200:
+            data = response.json()
+            if data.get("results"):
+                img_url = data["results"][0]["urls"]["regular"]
+                img_data = requests.get(img_url, timeout=15).content
+                with open(output_file, "wb") as f:
+                    f.write(img_data)
+                print(f"Background downloaded: {output_file}")
+                return output_file
+    except Exception as e:
+        print(f"Unsplash error: {e}")
     
     print("No image found, using solid color")
     return None
@@ -86,7 +106,6 @@ def create_caption_image(script, bg_image=None, output_image="caption.png"):
     if bg_image and os.path.exists(bg_image):
         img = Image.open(bg_image).convert("RGB")
         img = img.resize((width, height))
-        # একটু ডার্ক করে টেক্সট পড়ার সুবিধা
         overlay = Image.new("RGB", (width, height), (0, 0, 0))
         img = Image.blend(img, overlay, 0.45)
     else:
@@ -111,6 +130,7 @@ def create_caption_image(script, bg_image=None, output_image="caption.png"):
                 continue
     if font is None:
         font = ImageFont.load_default()
+        print("Using default font")
     
     words = script.split()
     lines = []
@@ -135,7 +155,6 @@ def create_caption_image(script, bg_image=None, output_image="caption.png"):
         bbox = draw.textbbox((0, 0), line, font=font)
         text_width = bbox[2] - bbox[0]
         x = (width - text_width) // 2
-        
         draw.text((x+2, y+2), line, font=font, fill=(0, 0, 0))
         draw.text((x, y), line, font=font, fill=(255, 255, 255))
         y += line_height
@@ -145,6 +164,9 @@ def create_caption_image(script, bg_image=None, output_image="caption.png"):
     return output_image
 
 def create_video(script, audio_file="voice.mp3", output_file="short.mp4"):
+    if not os.path.exists(audio_file):
+        raise Exception(f"Audio file not found: {audio_file}")
+    
     keywords = get_keyword(script)
     bg = download_background(keywords)
     caption_img = create_caption_image(script, bg)
