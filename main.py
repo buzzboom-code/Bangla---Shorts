@@ -115,6 +115,7 @@ def create_caption_image(script, bg_image=None, output_image="caption.png"):
     
     possible_fonts = [
         "fonts/NotoSansBengali-Regular.ttf",
+        "fonts/NotoSansBengali-Bold.ttf",
         "/usr/share/fonts/truetype/noto/NotoSansBengali-Regular.ttf",
         "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
     ]
